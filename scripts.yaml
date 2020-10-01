@@ -1,5 +1,5 @@
 env:
-  EXERCISE: Functor 
+  EXERCISE: Applicative 
 scripts:
   echo: echo "foo bar"
   test: stack test --ta "--match=Course.${EXERCISE}/"
