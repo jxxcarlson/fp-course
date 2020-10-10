@@ -318,9 +318,8 @@ sequence ::
   Applicative f =>
   List (f a)
   -> f (List a)
-sequence fas =
-  pure (foldRight (\fa acc -> unwrap fa : acc) [] fas)
-  where unwrap (f a) = a
+sequence fas = 
+  foldRight (lift2 (:.)) (pure Nil) fas
 
 
 -- | Replicate an effect a given number of times.
@@ -344,8 +343,9 @@ replicateA ::
   Int
   -> f a
   -> f (List a)
-replicateA =
-  error "todo: Course.Applicative#replicateA"
+replicateA n fa =
+   --(lift2 replicate) (pure n) fa
+   sequence $ replicate n fa
 
 -- | Filter a list with a predicate that produces an effect.
 --
@@ -366,14 +366,23 @@ replicateA =
 --
 -- >>> filtering (const $ True :. True :.  Nil) (1 :. 2 :. 3 :. Nil)
 -- [[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3]]
---
 filtering ::
   Applicative f =>
   (a -> f Bool)
   -> List a
   -> f (List a)
-filtering =
-  error "todo: Course.Applicative#filtering"
+filtering p xs = truePair <$> boolPair p xs
+
+boolPair :: Applicative f => (a -> f Bool) -> List a -> f ( List (a, Bool))
+boolPair p xs = lift2 zip fsts snds
+  where fsts = sequence $ map pure xs
+        snds = sequence $ map p xs
+
+truePair :: List (a, Bool) -> List a
+truePair Nil = Nil
+truePair xs = map fst . filter ((==) True . snd) $ xs
+
+
 
 -----------------------
 -- SUPPORT LIBRARIES --

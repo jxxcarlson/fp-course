@@ -38,8 +38,8 @@ exec ::
   State s a
   -> s
   -> s
-exec =
-  error "todo: Course.State#exec"
+exec state s =
+  snd $ runState state s
 
 -- | Run the `State` seeded with `s` and retrieve the resulting value.
 --
@@ -48,8 +48,8 @@ eval ::
   State s a
   -> s
   -> a
-eval =
-  error "todo: Course.State#eval"
+eval state s =
+  fst $ runState state s
 
 -- | A `State` where the state also distributes into the produced value.
 --
@@ -57,8 +57,7 @@ eval =
 -- (0,0)
 get ::
   State s s
-get =
-  error "todo: Course.State#get"
+get = State { runState = \s -> (s, s)}
 
 -- | A `State` where the resulting state is seeded with the given value.
 --
@@ -67,8 +66,8 @@ get =
 put ::
   s
   -> State s ()
-put =
-  error "todo: Course.State#put"
+put s =
+  State { runState = \_ -> ((), s) }
 
 -- | Implement the `Functor` instance for `State s`.
 --
@@ -79,8 +78,10 @@ instance Functor (State s) where
     (a -> b)
     -> State s a
     -> State s b
-  (<$>) =
-    error "todo: Course.State#(<$>)"
+  (<$>) f state = 
+     State { runState =  (\(a, s) -> (f a, s) ) . (runState state) }
+    -- State { ff . runState state  }
+    -- where ff (s, a) = (s, f a)
 
 -- | Implement the `Applicative` instance for `State s`.
 --
@@ -97,14 +98,20 @@ instance Applicative (State s) where
   pure ::
     a
     -> State s a
-  pure =
-    error "todo: Course.State pure#instance (State s)"
+  pure a =
+    State { runState = \s -> (a, s)}
   (<*>) ::
     State s (a -> b)
     -> State s a
     -> State s b 
-  (<*>) =
-    error "todo: Course.State (<*>)#instance (State s)"
+  (<*>) st st' =
+        State { runState = \s -> let 
+                                    (a,s1) = (runState st') s
+                                    (f, s2) = (runState st) s1
+                                  in
+                                    (f a, s2)
+                                    }
+    
 
 -- | Implement the `Bind` instance for `State s`.
 --
@@ -118,8 +125,15 @@ instance Monad (State s) where
     (a -> State s b)
     -> State s a
     -> State s b
-  (=<<) =
-    error "todo: Course.State (=<<)#instance (State s)"
+  (=<<) fs st =
+     State { runState = 
+              \s -> let  
+                      (a, s1) = (runState st) s
+                    in
+                      (runState (fs a)) s1
+     }
+
+
 
 -- | Find the first element in a `List` that satisfies a given predicate.
 -- It is possible that no element is found, hence an `Optional` result.
@@ -136,12 +150,33 @@ instance Monad (State s) where
 -- >>> let p x = (\s -> (const $ pure (x == 'i')) =<< put (1+s)) =<< get in runState (findM p $ listh ['a'..'h']) 0
 -- (Empty,8)
 findM ::
-  Monad f =>
+  (Eq a, Monad f) =>
   (a -> f Bool)
   -> List a
   -> f (Optional a)
-findM =
-  error "todo: Course.State#findM"
+findM p as =
+  lift1 (\(a, _) -> a) <$> find' (\(_, b) -> b) <$> boolPair p as
+
+
+-- foo
+--   :: (Eq a, Applicative f) =>
+--      (a -> f Bool) -> List a -> f (Optional (a, Bool))
+-- foo p as = find' (\(_, b) -> b) <$> boolPair p as
+
+-- bar
+--   :: (Eq b, Applicative f) =>
+--      (b -> f Bool) -> List b -> f (Optional b)
+-- bar p as =  lift1 (\(a, _) -> a) <$> foo p as
+
+
+
+find' :: Eq a => (a -> Bool) -> List a -> Optional a
+find' p as =
+  case as of 
+    Nil -> Empty
+    (a:.as') ->
+      if p a then Full a
+      else find' p as'
 
 -- | Find the first element in a `List` that repeats.
 -- It is possible that no element repeats, hence an `Optional` result.
@@ -154,8 +189,26 @@ firstRepeat ::
   Ord a =>
   List a
   -> Optional a
-firstRepeat =
-  error "todo: Course.State#firstRepeat"
+firstRepeat as = eval (firstRepeat_ as) S.empty
+
+firstRepeat_ :: Ord a => List a -> State (S.Set a) (Optional a)
+firstRepeat_ as =
+  let 
+    initialState = State $ \_ -> (Empty, S.empty)
+  in
+  foldRight nextState initialState as
+
+nextState
+  :: Ord a =>
+     a -> State (S.Set a) (Optional a) -> State (S.Set a) (Optional a)
+nextState item st = 
+    let 
+      (a, s) = runState st S.empty
+    in
+      if S.member item s  then
+                            State $ \_ -> (Full item, s)
+                          else 
+                            State $ \_ -> (a, S.insert item s)
 
 -- | Remove all duplicate elements in a `List`.
 -- /Tip:/ Use `filtering` and `State` with a @Data.Set#Set@.
